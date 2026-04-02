@@ -4,9 +4,8 @@
  * Źródło danych: Landsat 8 (C02/T1_L2) oraz ESA WorldCover 2021
  */
 
-//
 // 1. PARAMETRY ANALIZY
-//
+
 var targetCity = "Poznan";
 var dateStart = "2024-05-01";
 var dateEnd = "2024-06-30";
@@ -18,9 +17,7 @@ var aoi = ee.FeatureCollection("FAO/GAUL/2015/level2")
 Map.addLayer(aoi, {}, 'AOI - ' + targetCity);
 Map.centerObject(aoi, 11);
 
-//
 // 2. FUNKCJE POMOCNICZE (PRZETWARZANIE OBRAZÓW)
-//
 
 function applyScaleFactors(image) {
   var opticalBands = image.select("SR_B.*").multiply(0.0000275).add(-0.2);
@@ -41,9 +38,7 @@ function maskClouds(image) {
   return image.updateMask(mask);
 }
 
-//
 // 3. POBRANIE I FILTROWANIE DANYCH
-//
 
 var landsatCol = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
   .filterBounds(aoi)
@@ -55,22 +50,17 @@ var medianImage = landsatCol.median().clip(aoi);
 
 var landCover = ee.Image("ESA/WorldCover/v200/2021").select("Map").clip(aoi);
 
-//
 // 4. WYLICZENIE WSKAŹNIKÓW (NDVI, FV, EM, LST)
-// 
 
 var ndvi = medianImage.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
 
-var ndviStats = ndvi.reduceRegion({
-  reducer: ee.Reducer.minMax(),
-  geometry: aoi,
-  scale: 30,
-  maxPixels: 1e9
-});
-var ndviMin = ee.Number(ndviStats.get('NDVI_min'));
-var ndviMax = ee.Number(ndviStats.get('NDVI_max'));
+var ndviMin = 0.2;
+var ndviMax = 0.5;
 
-var fv = ((ndvi.subtract(ndviMin)).divide(ndviMax.subtract(ndviMin))).pow(2).rename('FV');
+// Przycięcie wartości NDVI
+var ndviConstrained = ndvi.clamp(ndviMin, ndviMax);
+
+var fv = ((ndviConstrained.subtract(ndviMin)).divide(ee.Number(ndviMax).subtract(ndviMin))).pow(2).rename('FV');
 
 var em = fv.multiply(0.004).add(0.986).rename('EM');
 
@@ -91,9 +81,7 @@ var lstStats = lst.reduceRegion({
 print("Min LST:", lstStats.get('LST_min'));
 print("Max LST:", lstStats.get('LST_max'));
 
-//
 // 5. ANALIZA STATYSTYCZNA W OPARCIU O POKRYCIE TERENU
-// 
 
 var combinedLST_LC = lst.addBands(landCover.rename("land_class"));
 
@@ -132,9 +120,7 @@ var chartFeatures = ee.List(zonalStats.get("groups")).map(function(item) {
   });
 });
 
-// 
 // 6. WIZUALIZACJA
-// 
 
 // RGB
 Map.addLayer(medianImage, {bands: ['SR_B4', 'SR_B3', 'SR_B2'], min: 0.0, max: 0.15}, 'Landsat RGB', false);
@@ -174,9 +160,7 @@ var lstChart = ui.Chart.feature.byFeature({
 
 print(lstChart);
 
-//
 // 7. EKSPORT DANYCH DO GOOGLE DRIVE
-//
 
 Export.image.toDrive({
   image: lst,
