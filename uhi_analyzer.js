@@ -1,10 +1,10 @@
 /**
- * Analiza Temperatury Powierzchni Ziemi (LST) i Miejskiej Wyspy Ciepła (MWC)
- * Obszar analizy: Poznań, Polska
- * Źródło danych: Landsat 8 (C02/T1_L2) oraz ESA WorldCover 2021
+ * Land Surface Temperature (LST) and Urban Heat Island (UHI) Analysis
+ * Analysis Area: Poznan, Poland
+ * Data Source: Landsat 8 (C02/T1_L2) and ESA WorldCover 2021
  */
 
-// 1. PARAMETRY ANALIZY
+// 1. ANALYSIS PARAMETERS
 
 var targetCity = "Poznan";
 var dateStart = "2024-05-01";
@@ -17,7 +17,7 @@ var aoi = ee.FeatureCollection("FAO/GAUL/2015/level2")
 Map.addLayer(aoi, {}, 'AOI - ' + targetCity);
 Map.centerObject(aoi, 11);
 
-// 2. FUNKCJE POMOCNICZE (PRZETWARZANIE OBRAZÓW)
+// 2. HELPER FUNCTIONS (IMAGE PROCESSING)
 
 function applyScaleFactors(image) {
   var opticalBands = image.select("SR_B.*").multiply(0.0000275).add(-0.2);
@@ -33,12 +33,12 @@ function maskClouds(image) {
   var qa = image.select('QA_PIXEL');
 
   var mask = qa.bitwiseAnd(cloudShadowBitmask).eq(0)
-               .and(qa.bitwiseAnd(cloudBitmask).eq(0));
+                .and(qa.bitwiseAnd(cloudBitmask).eq(0));
 
   return image.updateMask(mask);
 }
 
-// 3. POBRANIE I FILTROWANIE DANYCH
+// 3. DATA FETCHING AND FILTERING
 
 var landsatCol = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
   .filterBounds(aoi)
@@ -50,14 +50,14 @@ var medianImage = landsatCol.median().clip(aoi);
 
 var landCover = ee.Image("ESA/WorldCover/v200/2021").select("Map").clip(aoi);
 
-// 4. WYLICZENIE WSKAŹNIKÓW (NDVI, FV, EM, LST)
+// 4. INDEX CALCULATIONS (NDVI, FV, EM, LST)
 
 var ndvi = medianImage.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
 
 var ndviMin = 0.2;
 var ndviMax = 0.5;
 
-// Przycięcie wartości NDVI
+// Constrain NDVI values
 var ndviConstrained = ndvi.clamp(ndviMin, ndviMax);
 
 var fv = ((ndviConstrained.subtract(ndviMin)).divide(ee.Number(ndviMax).subtract(ndviMin))).pow(2).rename('FV');
@@ -81,7 +81,7 @@ var lstStats = lst.reduceRegion({
 print("Min LST:", lstStats.get('LST_min'));
 print("Max LST:", lstStats.get('LST_max'));
 
-// 5. ANALIZA STATYSTYCZNA W OPARCIU O POKRYCIE TERENU
+// 5. STATISTICAL ANALYSIS BASED ON LAND COVER
 
 var combinedLST_LC = lst.addBands(landCover.rename("land_class"));
 
@@ -120,18 +120,18 @@ var chartFeatures = ee.List(zonalStats.get("groups")).map(function(item) {
   });
 });
 
-// 6. WIZUALIZACJA
+// 6. VISUALIZATION
 
 // RGB
 Map.addLayer(medianImage, {bands: ['SR_B4', 'SR_B3', 'SR_B2'], min: 0.0, max: 0.15}, 'Landsat RGB', false);
 
-// Pokrycie terenu
+// Land Cover
 Map.addLayer(landCover, {bands: ['Map']}, 'ESA WorldCover', false);
 
 // NDVI
 Map.addLayer(ndvi, {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI', false);
 
-// LST (Mapa Ciepła)
+// LST (Heat Map)
 var lstPalette = [
   '040274', '040281', '0502a3', '0502b8', '0502ce', '0502e6',
   '0602ff', '235cb1', '307ef3', '269db1', '30c8e2', '32d3ef',
@@ -160,7 +160,7 @@ var lstChart = ui.Chart.feature.byFeature({
 
 print(lstChart);
 
-// 7. EKSPORT DANYCH DO GOOGLE DRIVE
+// 7. EXPORT DATA TO GOOGLE DRIVE
 
 Export.image.toDrive({
   image: lst,
